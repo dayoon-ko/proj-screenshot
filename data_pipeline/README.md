@@ -1,7 +1,7 @@
 # Question pipeline
 
 How the released question files in [`../data`](../data) were built from the PSAI screen recordings: training questions for the
-retrieval LoRA, the single-hop test set and the parallel multi-hop test set, and the final train / test split (step 9). Every step is a script with `--help`; LLM steps
+retrieval LoRA, the single test set and the multi (parallel) test set, and the final train / test split (step 9). Every step is a script with `--help`; LLM steps
 cache their raw outputs (resumable files given as arguments), so a re-run with the paper's caches reproduces the released files
 byte for byte without new LLM calls.
 
@@ -29,8 +29,8 @@ Person A = machine `DESKTOP-GFL3B1N` (test person); person B = machine `Learno` 
 | 4. task-text vectors for the competitor search | `s4_task_embeddings.py` + `python -m screenret.embed_text ocr --lora none` | `task_emb.npy` |
 | 5. candidate test questions per event (where / when / what / how / anchor + input values) | `s5_test_generate.py` | `scope.json`, `candidates.jsonl` |
 | 6. uniqueness judge (+ input-leak judge, what rule) | `s6_uniqueness.py` | `judged.jsonl` |
-| 7. single-hop test set (T2..T5) | `s7_build_single.py --person A` | `questions_test_single_T2T5.jsonl`, `single_all.jsonl` |
-| P. parallel multi-hop test set (T2..T5) | `p1_action_labels.py` ... `p4_parallel_set.py` (see below) | `questions_test_parallel_T2T5.jsonl` |
+| 7. single test set (T2..T5) | `s7_build_single.py --person A` | `questions_test_single_T2T5.jsonl`, `single_all.jsonl` |
+| P. multi (parallel) test set (T2..T5) | `p1_action_labels.py` ... `p4_parallel_set.py` (see below) | `questions_test_parallel_T2T5.jsonl` |
 | 9. final split: 1,000 training questions, the 433 unused T1-train recordings + their questions join the test set, freq2 dropped | `s9_final_split.py` | `questions_train.jsonl`, `t1_test_uids.json`, `questions_test_single.jsonl`, `questions_test_parallel.jsonl` |
 | 8. evaluation input for `scripts/make_eval_protocol.py` (run after step 9) | `s8_eval_input.py` | `eval_input_test.json`, `texts_test.jsonl` |
 
@@ -40,7 +40,7 @@ sequence) and **which** (one detail only readable from the screen). Gold = all r
 across tasks share their recordings. A question goes to T1-train / T1-val only if all its gold recordings lie in that part of T1;
 where-questions that name the app/site are dropped. 2,837 train / 315 val questions (person A); step 9 keeps 1,000 of the 2,837.
 
-### Single-hop test questions (steps 5-7)
+### Single test questions (steps 5-7)
 
 Scope: person A's events in T2..T5 with at least two usable frames (1,315 events; person B's events go through the same steps).
 Per event the LLM writes (`prompts/test_task_questions.txt`) where / when / what / how questions and a short cue that refers to the
@@ -58,9 +58,9 @@ Filters, in order:
 
 Result (person A, T2..T5): 3,575 questions = where 1,088, when 1,139, input 1,214, what 132, how 2 (step 9 adds 690 T1 questions).
 
-### Parallel multi-hop test questions (step P)
+### Multi (parallel) test questions (step P)
 
-Hops are verified single-hop facts (kept anchors and input values from `single_all.jsonl`) or diary records; links are chosen by
+Hops are verified facts of single questions (kept anchors and input values from `single_all.jsonl`) or diary records; links are chosen by
 rules and the LLM only words and checks the question (shared code in `parallel_lib.py`, prompts `prompts/parallel_*.txt`).
 - `p1_action_labels.py`: one action-family label per event ("create trip plan"), all events of a person on one site in the same call,
   so that counts over (site, action) are exact.
@@ -82,14 +82,14 @@ T1-train holds 66 % desktop questions (1,877 of 2,837), the test periods ~4 % de
 every web question (960) + 40 desktop questions sampled to that 4 % share (numpy `default_rng(1)` over the desktop questions in s3
 file order; category = diary category of the first gold recording) = `questions_train.jsonl`. T1-val is unchanged. The 433 T1-train
 recordings that are no training question's first gold recording (all desktop) join the test set (`t1_test_uids.json`) with the
-questions of the T1 question run below: single-hop questions with a content cue (`cue_type` content / mixed) whose gold recordings
+questions of the T1 question run below: single questions with a content cue (`cue_type` content / mixed) whose gold recordings
 are all in T1-train and whose first one is in the 433 (690 questions on 344 recordings), and parallel questions whose evidence
 recordings are all in the 433 (431). T1 qids get the prefix `T1:` (68 T1 parallel qids equal T2..T5 qids). freq2 questions are
-dropped everywhere. Test set: 4,265 single-hop + 846 parallel questions; the pool stays T1..T5 minus `bad_fids` (63,538 frames).
+dropped everywhere. Test set: 4,265 single + 846 multi questions; the pool stays T1..T5 minus `bad_fids` (63,538 frames).
 
 T1 question run (input of step 9, not shipped): the research versions of steps 5-7 and P1-P3 on person A's T1-train / T1-val events
-(single-hop generation and the p1 / p2 labels and wording with Claude Sonnet, uniqueness judge with Claude Opus 5.5), then
-`p4_parallel_set.py` on its p2 + p3 outputs for the `leak` score. Its outputs are 1,647 single-hop and 987 parallel questions;
+(single generation and the p1 / p2 labels and wording with Claude Sonnet, uniqueness judge with Claude Opus 5.5), then
+`p4_parallel_set.py` on its p2 + p3 outputs for the `leak` score. Its outputs are 1,647 single and 987 parallel questions;
 step 9 keeps the subsets above. The released command block does not regenerate this run.
 
 ## Reproduce the released files
@@ -135,7 +135,7 @@ python $P/s8_eval_input.py --single data/questions_test_single.jsonl --out-eval-
 
 Verified for this release: with the paper's raw caches, steps 1-3 reproduce the training-period split and all 8,659 person-A
 training/test v1 questions; steps 5-7 reproduce `scope.json`, `candidates.jsonl`, `judged.jsonl`, `single_all.jsonl` and the
-T2..T5 single-hop file (3,575) byte for byte, with zero LLM calls; P1-P4 reproduce the p2 specs, every round's specs / candidates /
+T2..T5 single file (3,575) byte for byte, with zero LLM calls; P1-P4 reproduce the p2 specs, every round's specs / candidates /
 kept questions and the T2..T5 parallel file (497) byte for byte (all persons: the 1,004-question research file), also without LLM
 calls; p4 on the T1 run recomputes the same `leak` scores as the 497 released ones from the same OCR. Step 9 gives exactly the
 paper's training set (the 1,000 questions of the research training run), the 433 T1 test recordings and the 1,121 T1 test qids,

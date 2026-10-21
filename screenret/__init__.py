@@ -1,4 +1,5 @@
-"""screenret: efficient continuous-stream screenshot embedding with Qwen3-VL-Embedding-2B (S + T_vit + T_llm) and its evaluation.
+"""screenret: efficient continuous-stream screenshot embedding with Qwen3-VL-Embedding-2B (Token Pruning with Grid Keep + KV Reuse)
+and its evaluation.
 
 Entry points: python -m screenret.timing | embed_stream | merge_segments | embed_text | evaluate   (each has --help)
 """

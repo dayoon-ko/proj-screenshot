@@ -34,7 +34,7 @@ def llm_macs_suffix(m: Model, P: int, L: int) -> int:
 
 
 def llm_macs_rows(m: Model, rows: np.ndarray) -> int:
-    """T_llm path: only positions `rows` (the host indices that were executed); row i attends over i+1 positions."""
+    """KV Reuse (LLM) path: only positions `rows` (the host indices that were executed); row i attends over i+1 positions."""
     tc = m.tcfg
     rows = np.asarray(rows, dtype=np.int64)
     att = 2 * tc.num_attention_heads * tc.head_dim * int((rows + 1).sum())

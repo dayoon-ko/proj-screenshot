@@ -43,7 +43,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     g.add_argument("--frames-root", default=os.environ.get("SCREENRET_FRAMES", ""), help="root of relative paths ($SCREENRET_FRAMES)")
     g.add_argument("--segment", default="0/1", help="i/n: embed only the i-th of n contiguous pieces of the stream (default 0/1)")
     g.add_argument("--limit", type=int, default=0, help="embed only the first n frames of the segment (quick checks)")
-    g.add_argument("--workers", type=int, default=3, help="DataLoader workers for image decoding + processor + S mask")
+    g.add_argument("--workers", type=int, default=3, help="DataLoader workers for image decoding + processor + Token Pruning mask")
     g.add_argument("--out", required=True, help="output .npz")
     return p.parse_args(argv)
 

@@ -1,12 +1,12 @@
-"""LLM part: token sequence, exact prefix reuse (with T_vit) and approximate reuse T_llm.
+"""LLM part: token sequence, exact prefix reuse (with KV Reuse (ViT)) and KV Reuse (LLM).
 
 Sequence = [prompt head (first image token at `first`)] + [one visual token per kept block] + [text tail incl. the final token].
 The embedding is the normalised final hidden state of the last token.
 
-Exact prefix reuse (always on with T_vit): the LLM is causal, so positions before the first changed position P are bit-identical to the
+Exact prefix reuse (on with KV Reuse): the LLM is causal, so positions before the first changed position P are bit-identical to the
 previous frame. Crop the previous frame's KV cache to P and prefill only [P, L). If nothing changed, return the previous embedding.
 
-T_llm (approximate): recompute only R = visual tokens of changed blocks + every text token after the first change + the final token
+KV Reuse (LLM) (approximate): recompute only R = visual tokens of changed blocks + every text token after the first change + the final token
 (+ any slot without cached K/V). Unchanged visual tokens after the first change reuse their cached per-layer K/V although their causal
 context changed: this is the approximation. Text after the change is always recomputed because it summarises the image.
 """
@@ -44,7 +44,7 @@ def first_changed_position(g: Grid, plan: FramePlan) -> int:
 
 
 def plan_llm(g: Grid, plan: FramePlan, approx_llm: bool):
-    """Fill plan.prefix, plan.skip_llm and (T_llm) plan.llm_rows, on the host."""
+    """Fill plan.prefix, plan.skip_llm and (KV Reuse (LLM)) plan.llm_rows, on the host."""
     st = plan.state
     L = g.llm_len(len(plan.kept))
     plan.prefix = first_changed_position(g, plan)
@@ -54,7 +54,7 @@ def plan_llm(g: Grid, plan: FramePlan, approx_llm: bool):
 
 
 def recompute_rows(g: Grid, plan: FramePlan) -> np.ndarray:
-    """T_llm: R, the sorted positions to run through the LLM (always contains the final position L-1)."""
+    """KV Reuse (LLM): R, the sorted positions to run through the LLM (always contains the final position L-1)."""
     f, kept, P = g.first, plan.kept, plan.prefix
     nk = len(kept)
     L = g.llm_len(nk)
@@ -82,7 +82,7 @@ def llm_inputs(g: Grid, kept: np.ndarray, kept_t: torch.Tensor, visual_tokens: t
 
 @torch.inference_mode()
 def run_exact(m: Model, g: Grid, plan: FramePlan, visual_tokens: torch.Tensor, deepstack: list) -> torch.Tensor:
-    """Stock HF LLM forward; with T_vit it continues from the previous frame's KV cache cropped to P (exact)."""
+    """Stock HF LLM forward; with KV Reuse (ViT) it continues from the previous frame's KV cache cropped to P (exact)."""
     st = plan.state
     if plan.skip_llm:
         return st.prev_emb
@@ -109,7 +109,7 @@ def run_exact(m: Model, g: Grid, plan: FramePlan, visual_tokens: torch.Tensor, d
 
 @torch.inference_mode()
 def run_approx(m: Model, g: Grid, plan: FramePlan, visual_tokens: torch.Tensor, deepstack: list) -> torch.Tensor:
-    """T_llm: run only rows R through every LLM layer. Per layer, write their fresh K/V into the full-grid slot cache and attend causally
+    """Run only rows R through every LLM layer. Per layer, write their fresh K/V into the full-grid slot cache and attend causally
     (by sequence index) over the cached K/V of all current positions.
     changed: re-implements the Qwen3 decoder layer (same modules) with a row subset and a slot-indexed K/V cache."""
     st = plan.state
@@ -166,5 +166,5 @@ def _llm_out(layer, h, o, n: int):
     return h + layer.mlp(layer.post_attention_layernorm(h))
 
 
-# changed: the dense per-layer parts of T_llm are looked up here so cpu_compile.enable() can swap in torch.compile'd versions
+# changed: the dense per-layer parts of KV Reuse (LLM) are looked up here so cpu_compile.enable() can swap in torch.compile'd versions
 KERNELS = {"llm_qkv": _llm_qkv, "llm_out": _llm_out}

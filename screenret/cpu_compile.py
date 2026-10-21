@@ -2,8 +2,8 @@
 
 What is compiled (inductor, dynamic shapes, so a new token count does not recompile):
   - ViT, every block: norm1 -> qkv -> RoPE, and proj + residual -> norm2 -> MLP + residual (vit.KERNELS)
-  - LLM, T_llm path: input norm -> q/k/v -> q/k norm -> mRoPE, and o_proj + residual -> norm -> MLP + residual (llm.KERNELS)
-  - LLM, exact path (FULL / S / S+T_vit): the whole HF language-model forward
+  - LLM, KV Reuse (LLM) path: input norm -> q/k/v -> q/k norm -> mRoPE, and o_proj + residual -> norm -> MLP + residual (llm.KERNELS)
+  - LLM, exact path (full screenshot / Token Pruning / + KV Reuse (ViT)): the whole HF language-model forward
 Attention, the K/V cache reads / writes and all host-side planning stay eager. Linear layers still call the same BLAS matmuls; the gain
 comes from fusing the element-wise work around them (norms, RoPE, SiLU * up, residual adds) and fewer dispatches. Same ops, same order:
 outputs match eager up to floating-point reassociation (cos >= 0.99999).

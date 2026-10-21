@@ -18,15 +18,16 @@ MAX_OCR_CHARS = 12000                   # OCR text is cut to this many character
 class MethodConfig:
     """Efficiency components of the screenshot route.
 
-    spatial             S: "none" | "lt" (drop a block equal within tau to its left OR upper block) | "lt-grid" (paper: lt + Grid
-                        Keep, one block per flat region per 2x2-block tile kept) | "pixelprune" (Pred-2D)
-    tau_levels          S threshold in grey levels
-    temporal_vit        T_vit: recompute only changed blocks in the ViT (cached K/V for the rest); implies exact LLM prefix reuse
-    delta_levels        T_vit change threshold in grey levels (block changed if max |pixel - pixel at its last recompute| > delta)
-    refresh_rho         T_vit full refresh when more than this fraction of the kept blocks changed ...
+    spatial             Token Pruning rule: "none" | "lt" (drop a block equal within tau to its left OR upper block) | "lt-grid"
+                        (paper: lt + Grid Keep, one block per flat region per 2x2-block tile kept) | "pixelprune" (Pred-2D)
+    tau_levels          Token Pruning threshold in grey levels (8 = 8/255)
+    temporal_vit        KV Reuse (ViT): recompute only changed blocks in the ViT (cached K/V for the rest); implies exact LLM prefix reuse
+    delta_levels        KV Reuse change threshold in grey levels (block changed if max |pixel - pixel at its last recompute| > delta)
+    refresh_rho         KV Reuse: full refresh when more than this fraction of the kept blocks changed ...
     refresh_every       ... or every K-th frame since the last refresh
-    approx_llm          T_llm: recompute only changed visual tokens + text after the first change (needs temporal_vit)
-    linear_patch_embed  "+pe": ViT patch embedding as F.linear instead of Conv3d (identical math; MPS Conv3d is very slow)
+    approx_llm          KV Reuse (LLM): recompute only changed visual tokens + text after the first change (needs temporal_vit)
+    linear_patch_embed  linear patch embedding ("+pe"): ViT patch embedding as F.linear instead of Conv3d (identical math; MPS Conv3d
+                        is very slow)
     """
     spatial: str = "none"
     tau_levels: float = 8.0
@@ -39,7 +40,7 @@ class MethodConfig:
 
     def __post_init__(self):
         assert self.spatial in ("none", "lt", "lt-grid", "pixelprune"), self.spatial
-        assert self.temporal_vit or not self.approx_llm, "T_llm reuses per-block state that only T_vit keeps"
+        assert self.temporal_vit or not self.approx_llm, "KV Reuse (LLM) reuses per-block state that only KV Reuse (ViT) keeps"
 
     @property
     def tau(self) -> float:
@@ -51,7 +52,8 @@ class MethodConfig:
 
     @property
     def name(self) -> str:
-        """Short tag, e.g. LT8t2TL+pe (S rule + tau, t2 = Grid Keep, T = T_vit, L = T_llm, +pe = linear patch embedding)."""
+        """Short tag, e.g. LT8t2TL+pe (Token Pruning rule + tau, t2 = Grid Keep, T = KV Reuse (ViT), L = KV Reuse (LLM), +pe = linear
+        patch embedding)."""
         s = {"none": "FULL", "lt": f"LT{self.tau_levels:g}", "lt-grid": f"LT{self.tau_levels:g}t2",
              "pixelprune": f"PP{self.tau_levels:g}"}[self.spatial]
         if self.spatial == "none" and self.temporal_vit:
@@ -67,11 +69,11 @@ class MethodConfig:
 
 # Named presets (paper rows). Explicit CLI flags override preset values.
 PRESETS: dict[str, MethodConfig] = {
-    "full": MethodConfig(),                                                             # baseline, stock Conv3d patch embedding
-    "full+pe": MethodConfig(linear_patch_embed=True),                                   # baseline, MPS-friendly patch embedding
-    "S": MethodConfig(spatial="lt", linear_patch_embed=True),                           # S
-    "S+T": MethodConfig(spatial="lt", temporal_vit=True, linear_patch_embed=True),      # S + T_vit (+ exact LLM prefix reuse)
-    "S+T+L": MethodConfig(spatial="lt", temporal_vit=True, approx_llm=True, linear_patch_embed=True),   # S + T_vit + T_llm
-    "S+G": MethodConfig(spatial="lt-grid", linear_patch_embed=True),                    # S with Grid Keep
-    "S+G+T+L": MethodConfig(spatial="lt-grid", temporal_vit=True, approx_llm=True, linear_patch_embed=True),   # full method
+    "full": MethodConfig(),                                                             # Full screenshot, stock Conv3d patch embedding
+    "full+pe": MethodConfig(linear_patch_embed=True),                                   # Full screenshot, linear patch embedding
+    "S": MethodConfig(spatial="lt", linear_patch_embed=True),                           # Token Pruning
+    "S+T": MethodConfig(spatial="lt", temporal_vit=True, linear_patch_embed=True),      # + KV Reuse (ViT) (+ exact LLM prefix reuse)
+    "S+T+L": MethodConfig(spatial="lt", temporal_vit=True, approx_llm=True, linear_patch_embed=True),   # + KV Reuse (LLM)
+    "S+G": MethodConfig(spatial="lt-grid", linear_patch_embed=True),                    # Token Pruning with Grid Keep
+    "S+G+T+L": MethodConfig(spatial="lt-grid", temporal_vit=True, approx_llm=True, linear_patch_embed=True),   # paper method
 }

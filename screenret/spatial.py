@@ -1,11 +1,14 @@
-"""S: spatial pruning of 32x32-px blocks before the ViT. Dropped blocks enter neither the ViT nor the LLM.
+"""Token Pruning, for spatial redundancy: drop 32x32-px blocks (one LLM token each) before the ViT, within a frame.
 
-Screens are full of flat or repeated regions (backgrounds, margins, table fills). Three rules over the processor's pixel values:
+Much of a screen is blank or flat (backgrounds, margins, whitespace, table fills). A block whose pixels are predictable from its left or
+upper neighbour carries little information, so it enters neither the ViT nor the LLM. Rules over the processor's pixel values (tau 8
+grey levels = 8/255):
 
-  lt          ("LT8") drop a block iff it is within tau (max abs, every pixel) of its LEFT or its UPPER neighbour block, comparing
-              original pixels. Every block is decided independently -> a few vectorised array ops.
-  lt-grid     (paper default, "LT8t2" = lt + Grid Keep) lt, then one block per flat region per 2x2-block tile is kept again, so a large
-              flat region keeps a sparse grid of blocks instead of only its first block. Kept blocks are a superset of lt's.
+  lt          (Token Pruning, "LT8") drop a block iff every pixel is within tau of its LEFT or its UPPER neighbour block, comparing
+              original pixels (order-free version of PixelPrune). Every block is decided independently -> a few vectorised array ops.
+  lt-grid     (Token Pruning with Grid Keep, "LT8t2", paper default) lt alone shrinks a large flat region (blank page, empty panel) to a
+              single token, so the model loses its size and layout. Grid Keep keeps one block per 2x2-block tile of each flat region
+              instead, at its own position. No training; kept blocks are a superset of lt's.
   pixelprune  PixelPrune Pred-2D: raster-order scan with a lossless-coding predictor from the reconstructed left / up / up-left
               neighbours (kept for comparison; sequential, slower on the CPU).
 

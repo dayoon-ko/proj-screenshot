@@ -8,22 +8,22 @@ Section names follow the submission's structure; adjust numbering at camera-read
 |---|---|---|
 | Embedding model, last-token pooling, instructions | `screenret/qwen_embedder.py`, `screenret/config.py` (`QUERY_INSTRUCTION`) | frames / OCR text: default instruction; queries: retrieval instruction |
 | Blocks (32x32 px = 2x2 patches = 1 LLM token), per-resolution constants | `screenret/model.py` (`Grid`, `grid`) | 1280x704 -> 880 blocks |
-| S: spatial pruning (LT8 left-or-upper rule; PixelPrune for comparison) | `screenret/spatial.py` (`lt_keep_mask`) | `--spatial lt --tau 8` |
+| Token Pruning (spatial redundancy; LT8 left-or-upper rule; PixelPrune for comparison) | `screenret/spatial.py` (`lt_keep_mask`) | `--spatial lt --tau 8` |
 | Grid Keep (part of Token Pruning in the paper's method: one block per flat region per 2x2-block tile kept) | `screenret/spatial.py` (`gridkeep_keep_mask`) | `--spatial lt-grid` (presets `S+G`, `S+G+T+L`) |
-| T_vit: change detection, refresh rule (rho 0.9, K 10), per-stream caches | `screenret/temporal.py` | `--temporal-vit --delta 8 --refresh-rho 0.9 --refresh-every 10` |
-| T_vit: partial ViT with cached K/V, per-block merger / DeepStack cache | `screenret/vit.py` | |
-| Exact LLM prefix reuse, T_llm approximate K/V reuse | `screenret/llm.py` | `--approx-llm` |
-| +pe (MPS Conv3d fix) | `screenret/model.py` (`embed_patches`) | `--linear-patch-embed` |
+| KV Reuse (temporal redundancy): change detection, refresh rule (rho 0.9, K 10), per-stream caches | `screenret/temporal.py` | `--temporal-vit --delta 8 --refresh-rho 0.9 --refresh-every 10` |
+| KV Reuse (ViT): partial ViT with cached K/V, per-block merger / DeepStack cache | `screenret/vit.py` | |
+| Exact LLM prefix reuse, KV Reuse (LLM) | `screenret/llm.py` | `--approx-llm` |
+| Linear patch embedding (MPS Conv3d fix) | `screenret/model.py` (`embed_patches`) | `--linear-patch-embed` |
 | Frame pipeline | `screenret/engine.py` (`preprocess`, `Engine.step`) | |
 | MAC accounting ("MAC fraction") | `screenret/macs.py`; per-frame rows from `engine.stats_row` | FULL 1280x704 frame = 3.084e12 MACs |
 | Retrieval LoRAs (pixel "v1" recipe: r 32 / alpha 32, ViT qkv/proj + LLM q/k/v/o; OCR: LLM q/k/v/o) | `screenret/model.py` (`merge_lora`, `attach_lora`) | merged by default; `--no-lora-merge` = PEFT's unmerged fp32 path (bf16); training code not released; the paper's pixel LoRA is trained on the 1,000 questions of `data/questions_train.jsonl` |
-| Consistency adapter (a second LoRA, same targets / size, initialised from the pixel LoRA, that encodes the pruned frames; queries stay on the pixel LoRA) | no new code: frames `--lora <adapter.pt>` in `embed_stream` / `timing`, queries `--lora <pixel LoRA.pt>` in `embed_text queries` | training code not released |
+| Consistency adapter (a second LoRA, same targets / size, initialised from the pixel LoRA, that encodes the pruned frames; queries stay on the pixel LoRA) | no new code: frames `--lora <adapter.pt>` in `embed_stream` / `timing`, queries `--lora <pixel LoRA.pt>` in `embed_text queries`; training: `scripts/train_consistency_adapter.py` | loss = (1 - cos) + ranking KL (tau 0.02) + MarginMSE vs the frozen pixel LoRA; paper adapter = step 200 of the default run |
 | CPU speed options | `screenret/cpu_compile.py` (`--compile`; kernels in `vit.KERNELS`, `llm.KERNELS`), `screenret/model.py` (`--weight-storage bf16 / bf16-llm-fp32`) | off by default |
 | OCR baselines (RapidOCR, Apple Vision accurate) + same-model text embedding | `screenret/ocr.py` | |
 
 ## Accuracy (main table, component ablation)
 
-Protocol (unfiltered): person A, 4,265 single-hop test questions + 846 parallel multi-hop questions (T2-T5 + the 433 T1-train
+Protocol (unfiltered): person A, 4,265 single + 846 multi (parallel) test questions (T2-T5 + the 433 T1-train
 recordings the LoRA does not train on; no freq2) x 63,538-frame pool (T1-T5 minus bad frames). Single-hop: gold = any frame of the question's recording; rank = 1 + #non-gold frames above the best gold frame; R@k.
 Parallel: per evidence group rank = 1 + #pool frames above the group's best frame (all frames compete, incl. other groups' gold);
 parallel R@10 = mean over questions of the per-question mean over groups of [rank <= 10] (`PR10`; strict all-groups `PA10`).
@@ -41,7 +41,7 @@ Paired bootstrap (B = 10,000, seed 0) and recording-clustered bootstrap (2,000),
 | test questions (4,265 single + 846 parallel) and LoRA training questions (1,000) | `data/` (built by `data_pipeline/`, see its README; final split = `s9_final_split.py`) |
 | protocol (4,265 single + 846 parallel) | `python scripts/make_eval_protocol.py --eval-input data/eval_input_test.json --texts data/texts_test.jsonl --parallel data/questions_test_parallel.jsonl --splits data/splits.json --frames-meta frames.jsonl --out protocol.json --queries-out protocol_queries.jsonl` (`--leak-filter`: 725 parallel; `--main-qids main_qids.json`: old 2,059 single-hop set) |
 | query vectors (per arm: pixel LoRA for screenshot rows, OCR LoRA for the OCR row) | `python -m screenret.embed_text queries --device cuda --dtype bfloat16 --no-lora-merge --lora <LoRA> --texts protocol_queries.jsonl --out q.npy` |
-| single-hop R@1/5/10, parallel PR@k / PA@k + deltas vs FULL | `python -m screenret.evaluate --protocol protocol.json --queries q.npy --frames FULL=... S=... S+T=... S+T+L=... --reference FULL --out table.json` |
+| single R@1/5/10, multi PR@k / PA@k + deltas vs FULL | `python -m screenret.evaluate --protocol protocol.json --queries q.npy --frames FULL=... S=... S+T=... S+T+L=... --reference FULL --out table.json` |
 
 Main-table cells: R@k and dR@k [95 % CI] = `evaluate` output; MAC fraction / refresh rate of each row = `summary` in the
 `merge_segments` JSON (`mac_frac`, `refresh_rate`).

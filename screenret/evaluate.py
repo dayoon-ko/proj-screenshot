@@ -1,10 +1,10 @@
-"""Retrieval accuracy of frame-vector runs on a fixed question set: single-hop R@k, parallel multi-hop recall@k, paired bootstrap.
+"""Retrieval accuracy of frame-vector runs on a fixed question set: single R@k, multi (parallel) recall@k, paired bootstrap.
 
 Protocol JSON (scripts/make_eval_protocol.py):
   pool        frame ids searched (paper: person A's T1-T5 frames minus bad frames = 63,538)
   pool_group  recording id of each pool frame
   questions   [{"qid", "row" (row in --queries), "type": "single" | "parallel", "groups": [[recording ids], ...]}]
-              (paper: 4,265 single-hop + 846 parallel person-A questions; an old {"gold": [...]} entry = one single-hop group)
+              (paper: 4,265 single + 846 multi person-A questions; an old {"gold": [...]} entry = one single group)
 Single-hop: gold = every pool frame of the question's recording(s); rank = 1 + #(non-gold pool frames scoring above the best gold frame);
             R@k = mean(rank <= k).
 Parallel (several evidence groups, each one or more recordings): per group, rank = 1 + #(pool frames scoring above the best frame of that
@@ -12,10 +12,10 @@ Parallel (several evidence groups, each one or more recordings): per group, rank
             PR@k = its mean over questions (paper: "parallel R@10"); PA@k = strict, mean of [every group within k].
 Scores are raw inner products of the stored vectors (primary) and, as a secondary number, of L2-normalised ones.
 Deltas vs the reference run: paired bootstrap over questions (B draws, seed 0) and a recording-clustered bootstrap (clusters = first
-recording of the first group), separately for the single-hop and the parallel set.
+recording of the first group), separately for the single and the multi (parallel) set.
 
 example: python -m screenret.evaluate --protocol protocol.json --queries q_lora.npy \
-             --frames FULL=runs/full_frames.npy S+T+L=runs/LT8TL_frames.npy --reference FULL --out results.json
+             --frames FULL=runs/full_frames.npy S+G+T+L=runs/LT8t2TL_frames.npy --reference FULL --out results.json
 """
 from __future__ import annotations
 
@@ -149,7 +149,7 @@ def main(argv=None) -> None:
     pool = np.asarray(proto["pool"], dtype=np.int64)
     pool_group = np.asarray(proto["pool_group"])
     Gs = gold_matrix(pool_group, single) if single else np.zeros((0, len(pool)), bool)
-    assert Gs.any(1).all(), "a single-hop question has no gold frame in the pool"
+    assert Gs.any(1).all(), "a single question has no gold frame in the pool"
     gidx = group_index(pool_group, parallel)
     Qall = np.load(a.queries)
     Qs = Qall[[q["row"] for q in single]].astype(np.float32)
@@ -169,7 +169,7 @@ def main(argv=None) -> None:
         assert (nrm > 0).all(), f"{path}: {(nrm == 0).sum()} pool rows are empty"
         o, hits[name] = evaluate_run(X, Qs, Gs, Qp, gidx)
         out["runs"][name] = dict(file=path, **o)
-    print(f"{len(single)} single-hop + {len(parallel)} parallel questions x {len(pool):,} pool frames | reference {ref} | "
+    print(f"{len(single)} single + {len(parallel)} multi questions x {len(pool):,} pool frames | reference {ref} | "
           f"bootstrap {a.n_boot} (+{a.n_cluster_boot} clustered)")
     for name, o in out["runs"].items():
         for key, metrics, shown in (("single", [f"R{k}" for k in KS], ("R1", "R10")),

@@ -2,7 +2,7 @@
 import pytest
 import torch
 
-from screenret.model import attach_lora, merge_lora
+from screenret.model import attach_lora, lora_state, merge_lora
 
 
 def toy(dtype):
@@ -52,3 +52,16 @@ def test_unmerged_equals_peft_bf16(tmp_path):
     ref = peft.get_peft_model(ref, peft.LoraConfig(r=32, lora_alpha=32, target_modules=["proj"])).eval()
     peft.set_peft_model_state_dict(ref, st)
     assert torch.equal(ours(x), ref(x))
+
+
+@torch.no_grad()
+def test_lora_dropout_is_identity_in_eval_and_state_round_trips(tmp_path):
+    path, st = lora_file(tmp_path)
+    x = torch.randn(8, 256)
+    plain, drop = toy(torch.float32), toy(torch.float32)
+    attach_lora(plain, path)
+    attach_lora(drop, path, dropout=0.5)
+    assert torch.equal(plain(x), drop.eval()(x))
+    assert not torch.equal(plain(x), drop.train()(x))
+    out = lora_state(drop)
+    assert out.keys() == st.keys() and all(torch.equal(out[k], st[k]) for k in st)

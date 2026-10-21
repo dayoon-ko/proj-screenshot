@@ -1,7 +1,8 @@
 """Engine: one screenshot in, one embedding out, carrying per-stream state between frames.
 
-Engine.step:  S keep set + T_vit plan (change detection, refresh rule)  ->  LLM plan (prefix P, skip, T_llm rows R)
-              ->  ViT (full or partial)  ->  sync  ->  LLM (exact prefix reuse or T_llm)  ->  stats / MAC row  ->  commit state
+Engine.step:  Token Pruning keep set + KV Reuse (ViT) plan (change detection, refresh rule)
+              ->  LLM plan (prefix P, skip, KV Reuse (LLM) rows R)
+              ->  ViT (full or partial)  ->  sync  ->  LLM (exact prefix reuse or KV Reuse (LLM))  ->  stats / MAC row  ->  commit state
 """
 from __future__ import annotations
 
@@ -24,11 +25,11 @@ from .vit import run_vit
 @dataclass
 class FrameInputs:
     inputs: dict                        # processor output (CPU tensors)
-    keep_mask: Optional[np.ndarray]     # S keep mask (None = all blocks)
+    keep_mask: Optional[np.ndarray]     # Token Pruning keep mask (None = all blocks)
 
 
 def preprocess(m: Model, image_path: str, cfg: MethodConfig) -> FrameInputs:
-    """Image file -> processor tensors (+ S keep mask). CPU only, so it can run in DataLoader workers."""
+    """Image file -> processor tensors (+ Token Pruning keep mask). CPU only, so it can run in DataLoader workers."""
     emb = m.embedder
     inputs = emb.preprocess([emb.format_model_input(image=image_path)])
     return FrameInputs(inputs, keep_mask(cfg.spatial, inputs["pixel_values"], inputs["image_grid_thw"], cfg.tau))

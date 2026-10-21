@@ -1,11 +1,11 @@
-"""ViT forward over a subset of blocks: plain (FULL / S) or partial with cached K/V (T_vit).
+"""ViT forward over a subset of blocks: plain (full screenshot / Token Pruning) or partial with cached K/V (KV Reuse (ViT)).
 
 Re-implements the HF Qwen3-VL vision forward layer by layer (same modules and weights) so that only some patches are queries:
-  * S: only the patches of kept blocks enter (changed: stock HF always runs every patch).
-  * T_vit: only patches of recomputed blocks are queries in EVERY layer; their fresh post-RoPE K/V are written into the stream's cache and
-    they attend over the cached K/V of all kept blocks. Unchanged blocks are never run; their merger / DeepStack outputs come from a
+  * Token Pruning: only the patches of kept blocks enter (changed: stock HF always runs every patch).
+  * KV Reuse: only patches of recomputed blocks are queries in EVERY layer; their fresh post-RoPE K/V are written into the stream's cache
+    and they attend over the cached K/V of all kept blocks. Unchanged blocks are never run; their merger / DeepStack outputs come from a
     per-block cache. Attention in the Qwen3-VL ViT is full (non-causal) over the image, so unchanged blocks do not see the change: this is
-    the approximation of T_vit.
+    the approximation of KV Reuse (ViT).
 """
 from __future__ import annotations
 

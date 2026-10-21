@@ -1,8 +1,9 @@
-"""T_vit: per-stream cache state, change detection and the refresh rule.
+"""KV Reuse, for temporal redundancy: per-stream cache state, change detection and the refresh rule.
 
-Consecutive screenshots differ in few blocks. For every block the stream keeps its pixels at its LAST recompute (not the previous frame,
-so slow drifts cannot accumulate unseen). A kept block whose pixels moved by more than delta since then is "changed" and recomputed; all
-other kept blocks reuse cached state.
+Consecutive screenshots (every 5 s) are often identical; only small regions change (typing, cursor). Across frames, a block counts as
+changed if any pixel differs by more than delta (8 grey levels = 8/255) from when it was LAST computed (not the previous frame, so slow
+drifts cannot accumulate unseen). Changed kept blocks are recomputed; the ViT reuses the cached K/V of all other kept blocks (vit.py),
+and the LLM reuses the cached K/V of their visual tokens (llm.py).
 
 Full refresh (recompute all kept blocks) when the stream starts, when more than rho of the kept blocks changed (a new screen), or every
 K frames since the last refresh (bounds the drift of the approximate reuse).
@@ -31,16 +32,16 @@ class StreamState:
         nl, n, nh, hd = len(m.vit.blocks), g.n_patches, m.vit_heads, m.vit_head_dim
         out = m.vcfg.out_hidden_size
         self.key = g.key
-        # T_vit: post-RoPE K/V of every patch in every ViT layer, so changed blocks attend over unchanged ones without recomputing them
+        # ViT: post-RoPE K/V of every patch in every ViT layer, so changed blocks attend over unchanged ones without recomputing them
         self.vit_k = torch.empty(nl, n, nh, hd, dtype=m.dtype, device=m.device)
         self.vit_v = torch.empty_like(self.vit_k)
-        # T_vit: per-block ViT outputs (merger = LLM visual token, DeepStack = features added to early LLM layers)
+        # KV Reuse (ViT): per-block ViT outputs (merger = LLM visual token, DeepStack = features added to early LLM layers)
         self.merged = torch.empty(g.n_blocks, out, dtype=m.dtype, device=m.device)
         self.deepstack = torch.empty(len(m.deepstack_layers), g.n_blocks, out, dtype=m.dtype, device=m.device)
-        # T_vit: pixels of each block at its last recompute (the change-detection reference)
+        # KV Reuse (ViT): pixels of each block at its last recompute (the change-detection reference)
         self.ref = torch.empty(g.n_blocks, 4 * m.patch_w.shape[1], dtype=torch.float32, device=m.device)
-        # T_llm: post-RoPE K/V of every LLM layer per FULL-grid slot (slot = position in the prompt with all blocks), so a block keeps
-        # its slot even when S keeps a different set of blocks next frame (~100 MB fp16)
+        # LLM: post-RoPE K/V of every LLM layer per FULL-grid slot (slot = position in the prompt with all blocks), so a block keeps
+        # its slot even when Token Pruning keeps a different set of blocks next frame (~100 MB fp16)
         self.llm_k = self.llm_v = None
         if approx_llm:
             tc = m.tcfg
@@ -54,16 +55,16 @@ class StreamState:
         self.prev_kept: Optional[np.ndarray] = None     # kept blocks of the previous frame (LLM prefix reuse)
         self.prev_emb: Optional[torch.Tensor] = None    # previous embedding (returned unchanged when nothing changed)
         self.exact_kv = None                            # exact LLM prefix reuse: HF DynamicCache of the previous frame
-        self.llm_valid = np.zeros(g.length, bool) if self.llm_k is not None else None   # T_llm: slot has cached K/V
+        self.llm_valid = np.zeros(g.length, bool) if self.llm_k is not None else None   # KV Reuse (LLM): slot has cached K/V
 
 
 @dataclass
 class FramePlan:
     """What to compute for one frame."""
-    kept: np.ndarray                    # block ids fed to ViT/LLM after S (sorted)
+    kept: np.ndarray                    # block ids fed to ViT/LLM after Token Pruning (sorted)
     recompute: np.ndarray               # block ids that go through the ViT this frame (subset of kept; = kept on a refresh)
     refresh: bool
-    changed_frac: float                 # fraction of kept blocks that changed (-1 at stream start / without T_vit)
+    changed_frac: float                 # fraction of kept blocks that changed (-1 at stream start / without KV Reuse (ViT))
     since_refresh: int                  # frames since the last refresh, after this frame
     state: Optional[StreamState]
     kept_t: torch.Tensor = None         # device copies of the index sets
@@ -71,16 +72,17 @@ class FramePlan:
     # LLM part, filled by llm.plan_llm()
     prefix: int = 0                     # P: positions [0, P) are bit-identical to the previous frame
     skip_llm: bool = False              # nothing changed at all: reuse the previous embedding
-    llm_rows: Optional[np.ndarray] = None   # T_llm: positions recomputed in the LLM (R)
+    llm_rows: Optional[np.ndarray] = None   # KV Reuse (LLM): positions recomputed in the LLM (R)
 
 
 @torch.inference_mode()
 def plan_frame(cfg: MethodConfig, m: Model, g: Grid, state: Optional[StreamState], block_pixels: torch.Tensor, first: bool,
                keep_mask: Optional[np.ndarray]) -> FramePlan:
-    """Kept blocks (S) and recomputed blocks (T_vit) of one frame. block_pixels: (n_blocks, 4*1536) float32 on the device."""
+    """Kept blocks (Token Pruning) and recomputed blocks (KV Reuse) of one frame. block_pixels: (n_blocks, 4*1536) float32 on the
+    device."""
     kept = np.flatnonzero(keep_mask) if keep_mask is not None else np.arange(g.n_blocks)
     kept_t = to_device(kept, m)
-    if state is None:                                   # no T_vit: every kept block goes through the ViT
+    if state is None:                                   # no KV Reuse (ViT): every kept block goes through the ViT
         return FramePlan(kept, kept, True, -1.0, 0, None, kept_t, kept_t)
     refresh = first or state.since_refresh + 1 >= cfg.refresh_every
     frac = -1.0

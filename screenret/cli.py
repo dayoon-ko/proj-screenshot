@@ -1,4 +1,5 @@
-"""Command-line flags shared by every entry point: method components (S / T_vit / T_llm / +pe) and model loading."""
+"""Command-line flags shared by every entry point: method steps (Token Pruning / Grid Keep / KV Reuse (ViT, LLM) / linear patch
+embedding) and model loading."""
 from __future__ import annotations
 
 import argparse
@@ -17,14 +18,15 @@ def add_method_args(p: argparse.ArgumentParser) -> None:
     g.add_argument("--preset", choices=list(PRESETS), default=None,
                    help="full | full+pe | S | S+T | S+T+L | S+G | S+G+T+L (default: S+G+T+L = the paper's method)")
     g.add_argument("--spatial", choices=["none", "lt", "lt-grid", "pixelprune"],
-                   help="S rule: lt = left-or-upper, lt-grid = lt + Grid Keep (paper), pixelprune = Pred-2D")
-    g.add_argument("--tau", type=float, help="S threshold in 8-bit grey levels (default 8)")
-    g.add_argument("--temporal-vit", action=BOOL, help="T_vit: ViT K/V reuse for unchanged blocks (+ exact LLM prefix reuse)")
-    g.add_argument("--delta", type=float, help="T_vit change threshold in grey levels (default 8)")
-    g.add_argument("--refresh-rho", type=float, help="T_vit full refresh if more than this fraction of kept blocks changed (default 0.9)")
-    g.add_argument("--refresh-every", type=int, help="T_vit full refresh every K frames (default 10)")
-    g.add_argument("--approx-llm", action=BOOL, help="T_llm: approximate LLM K/V reuse after the first change (needs --temporal-vit)")
-    g.add_argument("--linear-patch-embed", action=BOOL, help="+pe: Conv3d patch embedding as the identical F.linear (MPS fix)")
+                   help="Token Pruning rule: lt = left-or-upper, lt-grid = with Grid Keep (paper), pixelprune = Pred-2D")
+    g.add_argument("--tau", type=float, help="Token Pruning threshold in 8-bit grey levels (default 8 = 8/255)")
+    g.add_argument("--temporal-vit", action=BOOL, help="KV Reuse (ViT): cached ViT K/V for unchanged blocks (+ exact LLM prefix reuse)")
+    g.add_argument("--delta", type=float, help="KV Reuse change threshold in grey levels (default 8 = 8/255)")
+    g.add_argument("--refresh-rho", type=float, help="KV Reuse: full refresh if more than this fraction of kept blocks changed (0.9)")
+    g.add_argument("--refresh-every", type=int, help="KV Reuse: full refresh every K frames (default 10)")
+    g.add_argument("--approx-llm", action=BOOL,
+                   help="KV Reuse (LLM): cached K/V for unchanged visual tokens after the first change (needs --temporal-vit)")
+    g.add_argument("--linear-patch-embed", action=BOOL, help="linear patch embedding: Conv3d as the identical F.linear (MPS fix)")
 
 
 def method_from_args(args: argparse.Namespace) -> MethodConfig:
@@ -56,8 +58,8 @@ def add_model_args(p: argparse.ArgumentParser) -> None:
 def add_cpu_speed_args(p: argparse.ArgumentParser) -> None:
     g = p.add_argument_group("CPU speed (off by default)")
     g.add_argument("--compile", action="store_true",
-                   help="torch.compile (dynamic shapes) of the dense per-layer parts of ViT / T_llm and of the exact-path LLM forward; "
-                        "attention, K/V cache I/O and host planning stay eager")
+                   help="torch.compile (dynamic shapes) of the dense per-layer parts of the ViT / KV Reuse (LLM) and of the exact LLM "
+                        "forward; attention, K/V cache I/O and host planning stay eager")
 
 
 def load_from_args(args: argparse.Namespace) -> Model:

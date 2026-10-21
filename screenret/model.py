@@ -120,13 +120,15 @@ def _lora_pairs(path: str):
 
 class LoRALinear(torch.nn.Module):
     """nn.Linear + separate low-rank update, computed as PEFT does: A, B stay fp32 (PEFT upcasts bf16 / fp16 adapters), the input is
-    cast to fp32 for the low-rank path, base(x) + B(A(x)) * scale is summed in fp32 and cast back to the base output dtype."""
+    cast to fp32 for the low-rank path, base(x) + B(A(x)) * scale is summed in fp32 and cast back to the base output dtype.
+    dropout (training only, PEFT's lora_dropout) acts on the fp32 input of the low-rank path; it is the identity in eval mode."""
 
-    def __init__(self, base: torch.nn.Linear, a: torch.Tensor, b: torch.Tensor, scale: float = 1.0):
+    def __init__(self, base: torch.nn.Linear, a: torch.Tensor, b: torch.Tensor, scale: float = 1.0, dropout: float = 0.0):
         super().__init__()
         self.base, self.scale = base, scale
         self.lora_a = torch.nn.Parameter(a.float(), requires_grad=False)
         self.lora_b = torch.nn.Parameter(b.float(), requires_grad=False)
+        self.dropout = torch.nn.Dropout(dropout) if dropout else torch.nn.Identity()
 
     @property
     def weight(self):                   # expose the base weight (dtype / shape lookups by callers)
@@ -134,16 +136,27 @@ class LoRALinear(torch.nn.Module):
 
     def forward(self, x):
         y = self.base(x)
-        return (y + F.linear(F.linear(x.to(self.lora_a.dtype), self.lora_a), self.lora_b) * self.scale).to(y.dtype)
+        return (y + F.linear(F.linear(self.dropout(x.to(self.lora_a.dtype)), self.lora_a), self.lora_b) * self.scale).to(y.dtype)
 
 
-def attach_lora(model: torch.nn.Module, path: str, scale: float = 1.0) -> int:
+def attach_lora(model: torch.nn.Module, path: str, scale: float = 1.0, dropout: float = 0.0) -> int:
     """Unmerged LoRA: replace each target nn.Linear by a LoRALinear (alpha / r = 1 for the paper's r 32 / alpha 32)."""
     pairs = _lora_pairs(path)
     for module, a, b in pairs:
         parent, _, name = module.rpartition(".")
-        setattr(model.get_submodule(parent), name, LoRALinear(model.get_submodule(module), a, b, scale))
+        setattr(model.get_submodule(parent), name, LoRALinear(model.get_submodule(module), a, b, scale, dropout))
     return len(pairs)
+
+
+def lora_state(model: torch.nn.Module) -> dict:
+    """PEFT-format state dict (base_model.model.<module path>.lora_A / lora_B.weight) of the attached LoRALinear modules: the file
+    format every --lora option reads."""
+    state = {}
+    for name, mod in model.named_modules():
+        if isinstance(mod, LoRALinear):
+            state[f"base_model.model.{name}.lora_A.weight"] = mod.lora_a.detach().cpu().clone()
+            state[f"base_model.model.{name}.lora_B.weight"] = mod.lora_b.detach().cpu().clone()
+    return state
 
 
 def store_linear_weights_bf16(model: torch.nn.Module) -> None:
@@ -202,7 +215,7 @@ class Grid:
         return self.length - self.last - 1
 
     def llm_len(self, n_kept: int) -> int:
-        """LLM sequence length when only n_kept blocks are fed (S drops the rest)."""
+        """LLM sequence length when only n_kept blocks are fed (Token Pruning drops the rest)."""
         return self.first + n_kept + self.text_tail
 
 

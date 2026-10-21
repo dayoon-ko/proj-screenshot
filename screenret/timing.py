@@ -3,7 +3,8 @@
 Sample JSON (scripts/make_timing_sample.py): {"chunks": [{"ctx": [{"fid", "rel_path"}...], "frames": [...]}, ...]}. Each chunk is a
 window of consecutive frames of the screen stream; `ctx` are the frames right before it.
 
-Timed per frame: image read + processor (+ S mask) + ViT + LLM + device sync -> embedding on the CPU. OCR routes: OCR + text embedding.
+Timed per frame: image read + processor (+ Token Pruning mask) + ViT + LLM + device sync -> embedding on the CPU.
+OCR routes: OCR + text embedding.
 Untimed: model load, warm-up (first frames of the first window), the ctx frames before each window (stateful configs only: the caches
 reach the state the continuous stream has at the window start), the --gap sleep between frames (5-s capture period is mostly idle).
 
