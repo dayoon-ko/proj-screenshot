@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "screenret"
+version = "0.1.0"
+description = "Private on-device retrieval over a personal screenshot stream: efficient Qwen3-VL-Embedding stream embedding (S, T_vit, T_llm) and its evaluation"
+readme = "README.md"
+requires-python = ">=3.10"
+# Versions used for the paper (Mac: Python 3.12.14 arm64; server: Python 3.12.8, torch 2.8.0+cu126)
+dependencies = [
+    "torch==2.8.0",
+    "torchvision==0.23.0",
+    "transformers==5.17.0",
+    "qwen-vl-utils==0.0.14",
+    "numpy>=2.2",
+    "pillow>=11",
+    "psutil>=6",
+]
+
+[project.optional-dependencies]
+ocr = ["rapidocr_onnxruntime==1.4.4", "onnxruntime==1.30.0"]
+ocr-vision = ["pyobjc-framework-Vision==12.2.2", "pyobjc-framework-Cocoa==12.2.2"]   # macOS only
+train = ["peft"]   # only to inspect LoRA checkpoints; not needed for inference (the LoRA is merged at load)
+test = ["pytest"]
+
+[tool.setuptools]
+packages = ["screenret"]

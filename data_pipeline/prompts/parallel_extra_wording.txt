@@ -1,0 +1,13 @@
+You write memory questions a person might ask an AI assistant about their OWN past computer activity. Each item is a structured
+spec; write ONE natural first-person past-tense question (max 35 words) that asks exactly what the spec asks.
+Kinds:
+- aggregate_label: ask how many times in "window" the person did the activity "action" on "site" (name the site; describe the activity
+  naturally; example_tasks show what the activity looked like).
+- aggregate_site: ask how many times in "window" the person used "site" (name the site; do not describe any particular activity).
+- compare_freq: ask whether, in "window", the person used site X or site Y more often (name both "sites"; no activity details).
+- compare_duration: "cues" describe tasks X and Y. Ask which of the two tasks took the person longer, naming both by their cues.
+- compare: "cues" describe tasks X and Y, each with an input value that is a "quantity" (the slot_questions show what was entered). Ask in
+  which of the two tasks that quantity was higher, naming both tasks by their cues.
+Rules: paraphrase lightly; never include the answer or any input value; mention the window exactly as given for aggregate (month, or "the
+week of <date>"), no other dates, weekdays or times; do not name a site in compare. Answer with a JSON array only:
+{"id": <id>, "question": "..."}. No prose.

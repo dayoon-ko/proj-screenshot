@@ -1,0 +1,2 @@
+You get a question about one person's computer activity and a numbered list of that person's tasks on one site in one month.
+List the ids of EVERY task that the question counts. Answer with a JSON object only: {"ids": [<id>, ...]}. No prose.

@@ -1,0 +1,19 @@
+# Exact versions of the Mac environment used for the paper's timing / equivalence runs (Python 3.12.14, arm64).
+# The server accuracy runs used torch 2.8.0+cu126, transformers 5.17.0, numpy 2.5.2 (Python 3.12.8).
+torch==2.8.0
+torchvision==0.23.0
+transformers==5.17.0
+tokenizers==0.23.2
+huggingface_hub==1.32.0
+safetensors==0.8.0
+accelerate==1.15.0
+qwen-vl-utils==0.0.14
+numpy==2.5.3
+pillow==12.3.0
+psutil==7.2.2
+# OCR baselines
+rapidocr_onnxruntime==1.4.4
+onnxruntime==1.30.0
+# Apple Vision OCR (macOS only; uncomment on a Mac)
+# pyobjc-framework-Vision==12.2.2
+# pyobjc-framework-Cocoa==12.2.2

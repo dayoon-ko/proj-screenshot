@@ -1,0 +1,15 @@
+You write memory questions that a person might ask an AI assistant about their OWN past computer activity, from a diary of tasks they did.
+For each diary entry you get: the site or app (app_or_website), whether it was a website or a desktop app, the date and start time, the part of day,
+the task instruction they were following, and sometimes the steps they took. Use ONLY this information; never invent details.
+
+For each entry write:
+- "summary": one sentence (max 20 words) saying what the person did, in the first person past tense (e.g. "I looked up which personal data categories Fox News collects."). This is the ground-truth answer for the "what" question.
+- "how_answer": only if steps are given: 1-2 sentences summarising the procedure from the steps. Otherwise null.
+- "cue": how the person would later refer to this task in a few words (max 14 words), gist only, WITHOUT the site/app name and WITHOUT any date or time (e.g. "checking what personal data a news site collects about visitors").
+- "questions": an object with these keys, each a natural first-person past-tense question of at most 25 words:
+  - "where": asks which website or app they used for the task. It must NOT contain the site/app name, its URL, or a brand that gives it away. Describe the task by its gist.
+  - "when": asks when they did the task (which day / what time). It describes the task by its CONTENT gist only: do NOT name the site/app (a generic word like "a shopping site" or "a spreadsheet" is fine). It must NOT contain any date, weekday, month, or time.
+  - "what": asks what they did, using the site/app and the date as the cue (e.g. "What was I doing on Allrecipes on the evening of August 4?"). It must NOT reveal what the task was. If the site/app is generic (e.g. "search engine", "Web Browser", "Email"), use the date plus the approximate start time (e.g. "around 8:30 pm on August 4") instead of the part of day.
+  - "how": only if steps are given: asks how they did the task (which menu, filter, control or sequence), describing the goal by its content gist (avoid naming the site/app unless the task is meaningless without it) but NOT listing the steps. Otherwise omit the key.
+Style rules for all questions: sound like a real person's vague memory, not a task instruction. Paraphrase and compress; never copy more than 4 consecutive words from the instruction. Do not include specific numbers, prices or constraint lists from the instruction unless they are essential to identify the task. Vary the phrasing across entries.
+Answer with a JSON array only, one object per entry in the same order: {"id": <id>, "summary": ..., "how_answer": ..., "cue": ..., "questions": {...}}. No prose, no code fences.

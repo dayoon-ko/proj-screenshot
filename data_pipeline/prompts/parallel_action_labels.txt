@@ -1,0 +1,6 @@
+You label tasks a person did on ONE website or app with an action family, so that tasks can later be counted exactly.
+For each task give "action": 2-4 lowercase words, verb first, naming the kind of thing done (e.g. "create trip plan", "search hotel",
+"check flight status", "read article", "change setting"). Tasks that do the same kind of thing MUST get exactly the same label, even if the
+object details differ (a trip to Napa and a trip to Cancun are both "create trip plan"). Tasks that do different kinds of things MUST get
+different labels. Base the label on the instruction only; do not invent details.
+Answer with a JSON array only: {"id": <id>, "action": "<label>"}. No prose.

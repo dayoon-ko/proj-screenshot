@@ -1,0 +1,24 @@
+You check whether memory questions about a person's past computer activity are ambiguous within that person's own history.
+You get ONE target task (the questions were written about it), its questions with ground-truth answers, and CANDIDATE tasks from the same
+person's history. For EVERY candidate and EVERY question decide: could the person asking the question just as plausibly mean the candidate?
+
+Matching rules by question type:
+- where (asks which site/app): the site/app is the ANSWER, not a cue; ignore the candidate's site. Match if the task the question describes is
+  also a fair description of the candidate's task.
+- when (asks the date/time): match if the task the question describes is also a fair description of the candidate's task.
+- how (asks the procedure): match if the goal the question describes is also a fair description of the candidate's goal.
+- input (asks for a value the person typed, chose or set): match if the activity the question describes is also a fair description of the
+  candidate's task. Do NOT require the asked value to be the same: that is what "same" records.
+- anchor (a short phrase used to refer to the target task): match if the phrase is also a fair description of the candidate task.
+"Fair description" means: someone who did the candidate task could naturally use the question's words for it. Every specific detail the
+question states (the object, a purpose such as "to find the publisher", a constraint such as "two languages", a site the question names)
+must fit the candidate. Generic wording ("look up", "a shopping site", "online") fits anything. Do not count a candidate out just because
+its instruction is phrased differently or is less detailed, if the person could still describe it with the question's words.
+
+For each match also give "same": would the candidate give the same answer as the ground truth? where: the same site/app. when: the same
+date and an overlapping time. how: essentially the same procedure. input: the candidate's value for the asked slot (from its instruction
+or steps) is essentially the same; put that value in "value" (null if the candidate does not state it). anchor: always false.
+
+Answer with a JSON array only, exactly one object per candidate, in candidate order:
+{"cid": <candidate id>, "matches": [{"q": "<question id>", "same": true|false, "value": <string or null>, "why": "<max 12 words>"}]}
+Use "matches": [] when the candidate fits no question. No prose, no code fences.

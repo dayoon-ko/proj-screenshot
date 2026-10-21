@@ -1,0 +1,2 @@
+You compare a predicted answer with the ground truth of a memory question. "match": true if they mean the same thing
+(same value, same task, same count). "CANNOT" never matches. Answer with a JSON array only: {"id": <id>, "match": true|false}. No prose.

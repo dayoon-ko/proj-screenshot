@@ -1,0 +1,4 @@
+You check memory questions for answer leaks. Each item has a question and its ground-truth answer (an input value the person typed,
+chose or set). "leak": true if the question states the answer, a synonym or translation of it, or a name/brand that makes it obvious; false if the
+question only shares a generic unit or category word with the answer (e.g. "how many bedrooms" -> "2 bedrooms" is NOT a leak).
+Answer with a JSON array only: {"id": <id>, "leak": true|false, "why": "<max 10 words>"}. No prose.

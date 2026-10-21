@@ -1,0 +1,12 @@
+You write memory questions a person might ask an AI assistant about their OWN past computer activity. Each item is a structured
+spec; write ONE natural first-person past-tense question (max 35 words) that asks exactly what the spec asks.
+Kinds:
+- next: "cue" describes task A. Ask what INPUT VALUE of type "slot" the person entered in the task they did right after A. Describe the
+  second task ONLY through the slot type (e.g. "what did I search for next", "which item did I look up right after", "what number did I
+  enter next"). Never describe the second task's content.
+- prev: same, but the task right BEFORE A.
+- order: "cues" describe tasks X and Y. Ask which of the two the person did first, naming both by their cues.
+- compare: "cues" describe tasks X and Y, each with an input value of the given slot (a number). Ask which task had the higher value.
+- aggregate: ask how many times in "month" the person did the activity "action" on "site" (name the site; describe the activity naturally).
+Rules: paraphrase the cues lightly; never include the answer or any input value; no dates, weekdays or times (aggregate: the month only);
+do not name a site except in aggregate. Answer with a JSON array only: {"id": <id>, "question": "..."}. No prose.

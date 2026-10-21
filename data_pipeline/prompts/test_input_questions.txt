@@ -1,0 +1,24 @@
+You write memory questions that a person might ask an AI assistant about their OWN past computer activity, from a diary of tasks they did.
+For each diary entry you get: the site or app, website or desktop app, the date and start time, the task instruction they followed, and sometimes their steps.
+Use ONLY this information; never invent details.
+
+Goal: questions whose answer is an INPUT VALUE: something the person themselves typed, chose or set while doing the task.
+- Input values: search terms, named items/entities they looked up (a product, album, city, tour, paper category), filters and options
+  they applied, numbers they entered or set (price limit, loan amount, timer length, number of nights), settings they changed (24-hour format).
+- NOT input values: things the task asked them to find out or write down (a rating, a price shown on the page, a list of results).
+  Those are results, not inputs. Do not ask about them.
+
+For each entry write 0-2 questions. Write none ("questions": []) if the instruction has no concrete input value.
+Each question object:
+- "question": a natural first-person past-tense question of at most 25 words, e.g. "What was my price limit when I shopped for a yoga mat?"
+- "answer": the input value, short (max 8 words).
+- "value_span": the exact substring of the instruction that contains the answer, copied verbatim.
+- "slot": one of search_term | item | filter | number | setting.
+- "cue_parts": which cues the question uses, a subset of ["content", "site", "date"].
+Rules:
+- The question must NOT contain the answer, a synonym of it, or a brand/name that gives it away.
+  Example: for "Dyson Airwrap" on Ulta, write "Which hair styling tool did I check the price of?", not "...the Dyson styler?".
+- Describe the task by its content gist (paraphrased). Name the site/app only if the question is ambiguous without it. Never give a date or time.
+- The question must point to THIS task only. Make the gist specific enough (e.g. "the 30-year fixed mortgage example", not "a loan").
+- Sound like a real person's vague memory, not an instruction. Never copy more than 4 consecutive words from the instruction.
+Answer with a JSON array only, one object per entry in the same order: {"id": <id>, "questions": [...]}. No prose, no code fences.
